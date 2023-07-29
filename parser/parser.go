@@ -31,10 +31,13 @@ var precedences = map[token.TokenType]int{
 	token.LPAREN: CALL,
 }
 
+type (
+	prefixParseFn func() ast.Expression
+	infixParseFn func(ast.Expression) ast.Expression
+)
 
 type Parser struct {
 	l *lexer.Lexer
-
 	errors []string
 
 	curToken token.Token
@@ -44,20 +47,11 @@ type Parser struct {
 	infixParseFns map[token.TokenType]infixParseFn
 }
 
-type (
-	prefixParseFn func() ast.Expression
-	infixParseFn func(ast.Expression) ast.Expression
-)
-
 func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
 		l: l,
 		errors: []string{},
 	}
-
-	// Read two tokens, so curToken and peekToken are bothset
-	p.nextToken()
-	p.nextToken()
 
 	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
 	p.registerPrefix(token.IDENT, p.parseIdentifier)
@@ -79,7 +73,12 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.NOT_EQ, p.parseInfixExpression)
 	p.registerInfix(token.LT, p.parseInfixExpression)
 	p.registerInfix(token.GT, p.parseInfixExpression)
+
 	p.registerInfix(token.LPAREN, p.parseCallExpression)
+
+	// Read two tokens, so curToken and peekToken are bothset
+	p.nextToken()
+	p.nextToken()
 
 	return p
 }
@@ -153,8 +152,11 @@ func (p *Parser) parseLetStatement() *ast.LetStatement {
 		return nil
 	}
 
-	// TODO: We're skipping the expressions until we encounter a semicolon
-	for !p.curTokenIs(token.SEMICOLON){
+	p.nextToken()
+
+	stmt.Value = p.parseExpression(LOWEST)
+
+	for p.peekTokenIs(token.SEMICOLON){
 		p.nextToken()
 	}
 	
@@ -166,8 +168,9 @@ func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 
 	p.nextToken()
 
-	// TODO: We're skipping the expressions until we encounter a semicolon
-	for !p.curTokenIs(token.SEMICOLON){
+	stmt.ReturnValue = p.parseExpression(LOWEST)
+
+	for p.peekTokenIs(token.SEMICOLON){
 		p.nextToken()
 	}
 
